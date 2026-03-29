@@ -157,12 +157,12 @@ void right_triangle() {
   Serial.println("Triangle");
 
   go_forward();
-  delay(1500);
+  delay(1000);
   go_right();
-  delay(10);
+  delay(400);
   go_forward();
-  delay(1500);
-  go_left();
-  delay(5);
+  delay(1000);
+  go_right();
+  delay(600);
   go_forward();
 }
