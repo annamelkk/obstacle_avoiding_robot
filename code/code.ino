@@ -10,7 +10,7 @@
 const int motorSpeed = 255;
  
 void setup() {
-  Serial.begin(9600);
+//  Serial.begin(9600);
   // motor control pins are outputs
   pinMode(enA, OUTPUT);
   pinMode(enB, OUTPUT);
@@ -27,7 +27,7 @@ void setup() {
 }
  
 void loop() {
-/*
+
   // Go forwards
   go_forward();
   delay(3000);
@@ -49,11 +49,14 @@ void loop() {
   stop_all();
   delay(3000);
 
-*/
+
   right_triangle();
   delay(3000);
 
   stop_all();
+  delay(3000);
+
+  do_rectangle();
   delay(3000);
 
 }
@@ -93,7 +96,7 @@ void go_backward() {
 
 void go_right() {
   
-  Serial.println("Right");
+ // Serial.println("Right");
   
   digitalWrite(in1, HIGH);
   digitalWrite(in2, LOW);
@@ -108,7 +111,7 @@ void go_right() {
 
 void go_left() {
 
-  Serial.println("Left");
+ // Serial.println("Left");
   
   digitalWrite(in1, LOW);
   digitalWrite(in2, HIGH);
@@ -124,7 +127,7 @@ void go_left() {
 
 void stop_all() {
 
-  Serial.println("Stop All");
+ // Serial.println("Stop All");
   
   digitalWrite(in1, LOW);
   digitalWrite(in2, LOW);
@@ -139,7 +142,7 @@ void stop_all() {
 
 void go_round_clockwise() {
   
-  Serial.println("Doing a circle!");
+ // Serial.println("Doing a circle!");
   
   digitalWrite(in1, HIGH);
   digitalWrite(in2, LOW);
@@ -154,7 +157,7 @@ void go_round_clockwise() {
 
 void right_triangle() {
   
-  Serial.println("Triangle");
+  // Serial.println("Triangle");
 
   go_forward();
   delay(1000);
@@ -165,4 +168,25 @@ void right_triangle() {
   go_right();
   delay(600);
   go_forward();
+}
+
+
+void do_rectangle() {
+  
+  // Serial.println("Rectangle");
+
+  go_forward();
+  delay(1000);
+  go_right();
+  delay(400);
+  go_forward();
+  delay(800);
+  go_right();
+  delay(400);
+  go_forward();
+  delay(1000);
+  go_right();
+  delay(400);
+  go_forward();
+  delay(1000);
 }
