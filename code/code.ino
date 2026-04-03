@@ -1,5 +1,7 @@
 // ------------------ DEFINITIONS ------------------------
 
+
+// H-Bridge
 #define enA 	3
 #define enB 	6
 #define in1   2
@@ -8,6 +10,11 @@
 #define in4   7
 
  
+// Sound sensor
+
+
+
+
 // Set the speed (0 = off and 255 = max speed)
 const int motorSpeed = 255;
  
