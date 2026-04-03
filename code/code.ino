@@ -1,3 +1,5 @@
+// ------------------ DEFINITIONS ------------------------
+
 #define enA 	3
 #define enB 	6
 #define in1   2
@@ -59,10 +61,15 @@ void loop() {
   do_rectangle();
   delay(3000);
 
+  stop_all();
+  delay(1000);
+
 }
  
 
 // ---------------- FUNCTIONS --------------------
+
+// DIRECTIONS
 
 void go_forward() {
   
@@ -140,10 +147,13 @@ void stop_all() {
 }
 
 
+
+// SHAPES
+
 void go_round_clockwise() {
   
  // Serial.println("Doing a circle!");
-  
+
   digitalWrite(in1, HIGH);
   digitalWrite(in2, LOW);
   digitalWrite(in3, LOW);
@@ -178,15 +188,15 @@ void do_rectangle() {
   go_forward();
   delay(1000);
   go_right();
-  delay(400);
-  go_forward();
-  delay(800);
-  go_right();
-  delay(400);
+  delay(500);
   go_forward();
   delay(1000);
   go_right();
-  delay(400);
+  delay(500);
+  go_forward();
+  delay(1000);
+  go_right();
+  delay(500);
   go_forward();
   delay(1000);
 }
