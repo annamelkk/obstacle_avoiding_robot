@@ -16,7 +16,7 @@
 
 
 // Set the speed (0 = off and 255 = max speed)
-const int dead_zone = 245;
+const int dead_zone = 90;
  
 void setup() {
 //  Serial.begin(9600);
