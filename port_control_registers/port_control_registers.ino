@@ -18,11 +18,11 @@
 
 // LDR
 #define PIN_LDR   A0
-#define BLACK         280
-#define THRESHOLD     290
-#define WHITE         420
-#define SEARCH_SPEED  95
-#define DRIVE_SPEED   120
+#define BLACK         290
+#define THRESHOLD     300
+#define WHITE         405
+#define SEARCH_SPEED  100
+#define DRIVE_SPEED   130
 
 unsigned long last_sensor_time = 0;
 int           cached_distance = 999;
@@ -150,7 +150,7 @@ bool  is_obstacle()
 
 bool  is_on_line()
 {
-  return analogRead(PIN_LDR) < THRESHOLD;
+  return analogRead(PIN_LDR) < THRESHOLD; // below threshold means black
 }
 
 
