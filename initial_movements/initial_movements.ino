@@ -13,11 +13,14 @@
 // Sound sensor
 
 
+// LDR
+
 
 
 // Set the speed (0 = off and 255 = max speed)
-const int dead_zone = 90;
- 
+#define dead_zone_right  200 // A
+#define dead_zone_left  200 // B
+
 void setup() {
 //  Serial.begin(9600);
   // motor control pins are outputs
@@ -37,23 +40,36 @@ void setup() {
  
 void loop() {
 
-  go_forward( dead_zone+10 );
+
+  go_forward( dead_zone_right+10,  dead_zone_left+10 );
   delay(1000);
 
   stop_all();
   delay(1000);
 
-  go_backward( dead_zone+10 );
+  go_backward( dead_zone_right+10, dead_zone_left+10 );
   delay(1000);
 
   stop_all();
   delay(1000);
 
-  go_right( dead_zone+10, dead_zone);
+  go_right( dead_zone_right+10, 0);
+  delay(2000);
+
+  stop_all();
   delay(1000);
 
-  go_left( dead_zone+10, dead_zone);
+  go_left(0, dead_zone_left+20);
+  delay(2000);
+
+  stop_all();
   delay(1000);
+
+  go_right(dead_zone_right+20, dead_zone_left+20);
+  delay(1000);
+
+  stop_all();
+  delay(2000);
 
 }
  
@@ -62,9 +78,9 @@ void loop() {
 
 // DIRECTIONS
 
-void go_forward(int speed) {
+void go_forward(int speed1, int speed2) {
   
-  Serial.println("Forward");
+// Serial.println("Forward");
   
   digitalWrite(in1, LOW);
   digitalWrite(in2, HIGH);
@@ -72,13 +88,13 @@ void go_forward(int speed) {
   digitalWrite(in4, HIGH);
 
   // Set the motor speed
-  analogWrite(enA, speed); 
-  analogWrite(enB, speed);
+  analogWrite(enA, speed1); 
+  analogWrite(enB, speed2);
 }
 
-void go_backward(int speed) {
+void go_backward(int speed1, int speed2) {
   
-  Serial.println("Dackward");
+// Serial.println("Dackward");
   
   digitalWrite(in1, HIGH);
   digitalWrite(in2, LOW);
@@ -86,8 +102,8 @@ void go_backward(int speed) {
   digitalWrite(in4, LOW);
 
   // Set the motor speed
-  analogWrite(enA, speed); 
-  analogWrite(enB, speed);
+  analogWrite(enA, speed1); 
+  analogWrite(enB, speed2);
 
 }
 
@@ -141,7 +157,7 @@ void stop_all() {
 }
 
 
-
+/*
 // SHAPES
 
 void go_round_clockwise(int speed) {
@@ -194,3 +210,4 @@ void do_rectangle(int speed) {
   go_forward(speed);
   delay(1000);
 }
+*/
