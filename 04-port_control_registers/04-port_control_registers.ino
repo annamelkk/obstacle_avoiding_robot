@@ -15,18 +15,22 @@
 #define BIT_ECHO  3   // D10 - P103
 #define OBSTACLE_DISTANCE 20
 
+unsigned long last_sensor_time = 0;
+int           cached_distance = 999;
+
 
 // LDR
 #define PIN_LDR   A0
 #define BLACK         290
-#define THRESHOLD     300
+#define THRESHOLD     310
 #define WHITE         405
 #define SEARCH_SPEED  100
 #define DRIVE_SPEED   130
 
-unsigned long last_sensor_time = 0;
-int           cached_distance = 999;
-int           last_turn = 1; // 1 spin right, -1 spin left
+int   last_turn = 1; // 1 spin right, -1 spin left
+float Kp = 0.1;
+int   last_error = 0;
+
 
 void setup()
 {
@@ -56,7 +60,17 @@ void setup()
 void  loop()
 {
   Serial.println(analogRead(PIN_LDR));
-  follow_line();
+  int ldr_value = analogRead(PIN_LDR);
+
+  if (ldr_value < THRESHOLD)
+  {
+    last_error = ldr_value - THRESHOLD;
+    track_correction(ldr_value);
+  }
+  else
+    search_line();
+
+
   /*
   if (millis() - last_sensor_time >= 100)
   {
@@ -154,19 +168,23 @@ bool  is_on_line()
 }
 
 
-void  follow_line()
+void  search_line()
 {
-  if (is_on_line())
-  {
-    last_turn *= -1; // update turn direction
-    drive(DRIVE_SPEED, DRIVE_SPEED);
-    delay(50);
-  }
-  else
-  {
-    if (last_turn == 1)
+    if (last_error < 1)
       drive(SEARCH_SPEED, -SEARCH_SPEED); // spin right
     else
       drive(-SEARCH_SPEED, SEARCH_SPEED); // spin left
-  }
+}
+
+void  track_correction(int sensor_val)
+{
+  int error = sensor_val - THRESHOLD;
+  int correction = Kp * error;
+
+  Serial.print("sensor: "); Serial.print(sensor_val);
+  Serial.print("  error: "); Serial.println(error);
+  int right_corrected = constrain(DRIVE_SPEED - correction, 60, 255);
+  int left_corrected = constrain(DRIVE_SPEED + correction, 60, 255);
+
+  drive(right_corrected, left_corrected);
 }
