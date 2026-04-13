@@ -3,8 +3,8 @@
 #define IN1 2
 #define IN2 4
 #define ENB 6
-#define IN3 7
-#define IN4 5
+#define IN3 5
+#define IN4 7
 #define sensorPin A0
 #define trigPin 11
 #define echoPin 10

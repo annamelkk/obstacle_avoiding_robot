@@ -22,7 +22,7 @@ int           cached_distance = 999;
 // LDR
 #define PIN_LDR   A0
 #define BLACK         290
-#define THRESHOLD     310
+#define THRESHOLD     298
 #define WHITE         405
 #define SEARCH_SPEED  100
 #define DRIVE_SPEED   130
@@ -156,22 +156,17 @@ int get_distance_cm()
   return (duration * 0.0343) / 2;
 }
 
-bool  is_obstacle()
-{
-  return cached_distance < OBSTACLE_DISTANCE;
-}
+bool  is_obstacle() { return cached_distance < OBSTACLE_DISTANCE; }
 
 
-bool  is_on_line()
-{
-  return analogRead(PIN_LDR) < THRESHOLD; // below threshold means black
-}
+bool  is_on_line() { return analogRead(PIN_LDR) < THRESHOLD; // below threshold means black }
 
 
 void  search_line()
 {
     if (last_error < 1)
       drive(SEARCH_SPEED, -SEARCH_SPEED); // spin right
+      last_turn *= -1;
     else
       drive(-SEARCH_SPEED, SEARCH_SPEED); // spin left
 }
