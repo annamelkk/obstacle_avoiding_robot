@@ -1,6 +1,6 @@
 // ====================== DEFINITIONS ======================
 // Motor and H-bridge
-
+#define DZ        100
 #define PIN_ENA   3
 #define PIN_ENB   6
 #define BIT_IN1   4   // D2 - P104
@@ -36,9 +36,10 @@ void setup()
   Serial.begin(9600);
 
   // Motor direction pins – all on PORT1
-  R_PORT1->PDR  |=  (1 << BIT_IN1) | (1 << BIT_IN2) |
+  R_PORT1->PDR  |=  (1 << BIT_IN1) | (1 << BIT_IN2) | // all INs as output
                     (1 << BIT_IN3) | (1 << BIT_IN4);
-  R_PORT1->PODR &= ~((1 << BIT_IN1) | (1 << BIT_IN2) |
+
+  R_PORT1->PODR &=  ~((1 << BIT_IN1) | (1 << BIT_IN2) | // start LOW
                      (1 << BIT_IN3) | (1 << BIT_IN4));
 
   // Ultrasonic sensor
@@ -50,7 +51,7 @@ void setup()
   pinMode(PIN_ENA, OUTPUT);
   pinMode(PIN_ENB, OUTPUT);
 
-  delay(2000);
+  delay(2000); // to put robot into position
   last_sensor_time = millis();
 }
 
@@ -102,21 +103,19 @@ void P_CTRL()
 {
   // calculate error (positive = white side, negative = black side)
   int error = ldr - GREY;
-
-  int base       = 100;                                    // dead zone floor
   int correction = constrain((int)(0.3f * abs(error)), 0, 155); // 100+155=255 max
 
   if (error > 10)           // case white — veer right
   {
-    drive(base + correction, base);
+    drive(DZ + correction, DZ);
   }
   else if (error < -10)     // case black — veer left
   {
-    drive(base, base + correction);
+    drive(DZ, DZ + correction);
   }
   else                      // case grey — on the line, drive straight
   {
-    drive(base, base);
+    drive(DZ, DZ);
   }
 }
 
