@@ -122,7 +122,7 @@ void P_CTRL(int ldr)
     prev_error = 0;
   }
   else                      // case white 
-    pid_search();
+    pid_search(ldr);
 }
 
 // ====================== LINE HELPERS ====================
