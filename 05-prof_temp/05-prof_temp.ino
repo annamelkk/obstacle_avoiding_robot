@@ -16,25 +16,41 @@
 
 // LDR
 #define PIN_LDR       A0
-#define BLACK         525 
-#define THRESHOLD     610
-#define WHITE         725
-#define SEARCH_SPEED  100
-#define DRIVE_SPEED   130
+#define BLACK         495
+#define DEADBAND      8
+#define THRESHOLD     500
+#define WHITE         730
 
-#define k_p           0.1
-#define k_i           0.1
-#define k_d           0.2
+
+#define LINE_LOST_W   700
+#define LINE_LOST_B   400
+
+
+#define SEARCH_SPEED  110
+#define DRIVE_SPEED   255
+#define RECOVER_SPEED 110
+
+#define k_p           0.4
+#define k_i           0.02
+#define k_d           0.1
 
 // ====================== GLOBALS =========================
-unsigned long last_sensor_time  = 0;
-int           cached_distance   = 999;
 
-bool          was_on_line       = 1;
-int           last_turn         = 1;   // 1 = spin right, -1 = spin left
-float         error             = 0;
-float         prev_error        = 0;
-float         integral          = 0;
+float error = 0.0;
+float prev_error = 0.0;
+float integral = 0.0;
+float derivative = 0.0;
+
+float filtered_sensor = 0.0;
+float alpha = 0.35;
+
+unsigned long prev_time = 0;
+int last_turn = 1;
+
+unsigned int last_sensor_time = 0;
+int           cached_distance = 999;
+
+
 // ====================== SETUP ===========================
 void setup()
 {
@@ -55,123 +71,114 @@ void setup()
   pinMode(PIN_ENA, OUTPUT);
   pinMode(PIN_ENB, OUTPUT);
 
+  int first_read = analogRead(PIN_LDR);
+  filtered_sensor = first_read;
+
+  prev_time = micros();
+  last_sensor_time = micros();
+
   delay(2000);
-  last_sensor_time = millis();
+  
 }
 
 // ====================== LOOP ============================
 void loop()
 {
-  /*
   // read distance
-  if (millis() - last_sensor_time >= 100)
+  if (micros() - last_sensor_time >= 100)
   {
     cached_distance  = get_distance_cm();
-    last_sensor_time = millis();
+    last_sensor_time = micros();
   }
 
   if (cached_distance < OBSTACLE_DISTANCE)
-  {
     stop();
-  }
   else
   {
-  */
     // read ldr
     int ldr = analogRead(PIN_LDR);
     Serial.print("LDR value: "); Serial.println(ldr);
 
-    ON_OFF_CTRL(ldr);   // on/off control function with fixed PWM
-    // P_CTRL(ldr);     // p-control function where motor PWM is proportional to error
-  //}
-  
-  Serial.print("LDR=");
-  Serial.print(analogRead(PIN_LDR));
-  
-  Serial.print(" | TH=");
-  Serial.print(THRESHOLD);
-  
-  Serial.print(" | ON=");
-  Serial.print(is_on_line());
-
-  Serial.print(" | LT=");
-  Serial.println(last_turn);
+    PID_CTRL();     // p-control function where motor PWM is proportional to error
+  }
 }
 
 // ====================== CONTROL FUNCTIONS ===============
+void PID_CTRL() {
+  int sensor_val = read_filtered_sensor();
 
-void ON_OFF_CTRL(int ldr)
-{
-  if (is_on_line())          // case black 
-  {
-    drive(DRIVE_SPEED, DRIVE_SPEED);
-    was_on_line = 1;
+  // Time step in seconds
+  unsigned long now = micros();
+  float dt = (now - prev_time) / 1000000.0;
+  prev_time = now;
+
+  // Prevent bad derivative spikes
+  if (dt <= 0.0) dt = 0.001;
+  if (dt > 0.05) dt = 0.05;
+
+  // Detect probable line loss
+  if (sensor_val >= LINE_LOST_W || sensor_val <= LINE_LOST_B) {
+    recover_line();
+    return;
   }
-  else                      // case white 
-    search_line();
-}
 
-void P_CTRL(int ldr)
-{
-  if (is_on_line())          // case black 
-  {
-    drive(DRIVE_SPEED, DRIVE_SPEED);
-    
-    error = 0;
-    integral = 0;
-    prev_error = 0;
+  // Error = target edge - actual reading
+  error = (float)(THRESHOLD - sensor_val);
+
+  // Deadband to reduce zigzag
+  if (abs((int)error) <= DEADBAND) {
+    error = 0.0;
   }
-  else                      // case white 
-    pid_search(ldr);
-}
 
-// ====================== LINE HELPERS ====================
+  // Integral with anti-windup
+  integral += error * dt;
+  if (integral > 40.0) integral = 40.0;
+  if (integral < -40.0) integral = -40.0;
 
-void search_line()
-{
-  if (was_on_line)
-  {
-    last_turn *= -1;
-    was_on_line = 0;
+  // Derivative
+  derivative = (error - prev_error) / dt;
+
+  // PID output
+  float correction = k_p * error + k_i * integral + k_d * derivative;
+
+  // Remember last useful direction
+  if (error > 0) last_turn = 1;
+  if (error < 0) last_turn = -1;
+
+  // Slow down on sharper turns
+  int current_base = DRIVE_SPEED;
+
+
+  if (abs((int)error) > 35) {
+    current_base = SEARCH_SPEED;
   }
-  if (last_turn == 1)
-  {
-    Serial.println("turining left");
-    drive(SEARCH_SPEED, DRIVE_SPEED);
-  }
-  else
-  {
-    Serial.println("turning right");
-    drive(DRIVE_SPEED, SEARCH_SPEED);
-  }
-}
 
+  int right_speed = current_base - correction;
+  int left_speed  = current_base + correction;
 
-void pid_search(int sensor_val)
-{
-  error += last_turn;
-
-  integral += error;
-  
-  float derivative = error - prev_error;
-
-  float correction = (k_p * error) + (k_i * integral) + (k_d * derivative);
-
-  int left_speed  = DRIVE_SPEED + correction;
-  int right_speed = DRIVE_SPEED - correction;
-
-  left_speed  = constrain(left_speed, 0, 255);
-  right_speed = constrain(right_speed, 0, 255);
-
-  drive(left_speed, right_speed);
+  drive(right_speed, left_speed);
 
   prev_error = error;
 }
 
+// ====================== LINE HELPERS ====================
+
+
+void recover_line()
+{
+  if (last_turn == 1)
+    drive(-RECOVER_SPEED, RECOVER_SPEED);
+  else
+    drive(RECOVER_SPEED, -RECOVER_SPEED);
+}
+
+bool is_on_line()  { return analogRead(PIN_LDR) < THRESHOLD; }
 // ====================== MOTOR HELPERS ===================
 
 void set_right_motor(int speed)
 {
+  if (speed < -255) speed = -255;
+  if (speed > 255) speed = 255;
   if (speed > 0)
   {
     R_PORT1->PODR |=  (1 << BIT_IN1);
@@ -189,6 +196,8 @@ void set_right_motor(int speed)
 
 void set_left_motor(int speed)
 {
+  if (speed < -255) speed = -255;
+  if (speed > 255) speed = 255;
   if (speed > 0)
   {
     R_PORT1->PODR |=  (1 << BIT_IN3);
@@ -234,5 +243,11 @@ int get_distance_cm()
   return (duration * 0.0343) / 2;
 }
 
-bool is_obstacle() { return cached_distance < OBSTACLE_DISTANCE; }
-bool is_on_line()  { return analogRead(PIN_LDR) < THRESHOLD; }
+int read_filtered_sensor()
+{
+  int raw = analogRead(PIN_LDR);
+  filtered_sensor = alpha * raw + (1.0 - alpha) * filtered_sensor;
+  return (int)filtered_sensor;
+}
+
+
