@@ -1,4 +1,5 @@
 // ====================== DEFINITIONS ======================
+
 // Motor and H-bridge
 #define PIN_ENA   3
 #define PIN_ENB   6
@@ -17,22 +18,32 @@
 // LDR
 #define PIN_LDR       A0
 #define BLACK         495
-#define DEADBAND      8
+#define DEADBAND      5
 #define THRESHOLD     500
 #define WHITE         730
 
 
-#define LINE_LOST_W   700
-#define LINE_LOST_B   400
+#define LINE_LOST_W   600
+#define LINE_LOST_B   420
 
 
-#define SEARCH_SPEED  110
-#define DRIVE_SPEED   255
+#define SEARCH_SPEED  100
+#define DRIVE_SPEED   190
 #define RECOVER_SPEED 110
 
-#define k_p           0.4
-#define k_i           0.02
+// PID controller values
+#define k_p           0.45
+
+#define k_i           0.01
+#define anti_windup   35.0
+
 #define k_d           0.1
+
+// sensor poll interval
+#define SENSOR_POLL_MS 60UL
+
+// recovery timeout - prevents infinite spin
+#define RECOVER_TIMEOUT_MS 600UL
 
 // ====================== GLOBALS =========================
 
@@ -42,7 +53,7 @@ float integral = 0.0;
 float derivative = 0.0;
 
 float filtered_sensor = 0.0;
-float alpha = 0.35;
+float alpha = 0.25;
 
 unsigned long prev_time = 0;
 int last_turn = 1;
@@ -50,13 +61,17 @@ int last_turn = 1;
 unsigned int last_sensor_time = 0;
 int           cached_distance = 999;
 
+// recovery state
+bool          recovering = false;
+unsigned long recover_start_time = 0;
+
 
 // ====================== SETUP ===========================
 void setup()
 {
   Serial.begin(9600);
 
-  // Motor direction pins – all on PORT1
+  // motor direction pins – all on PORT1 in Renesas datasheet
   R_PORT1->PDR  |=  (1 << BIT_IN1) | (1 << BIT_IN2) |
                     (1 << BIT_IN3) | (1 << BIT_IN4);
   R_PORT1->PODR &= ~((1 << BIT_IN1) | (1 << BIT_IN2) |
@@ -75,24 +90,25 @@ void setup()
   filtered_sensor = first_read;
 
   prev_time = micros();
-  last_sensor_time = micros();
-
-  delay(2000);
-  
+  last_sensor_time = millis(); 
+  delay(1000); // 1 sec delay to place the robot in position
 }
 
 // ====================== LOOP ============================
 void loop()
 {
   // read distance
-  if (micros() - last_sensor_time >= 100)
+  if (millis() - last_sensor_time >= SENSOR_POLL_MS)
   {
     cached_distance  = get_distance_cm();
-    last_sensor_time = micros();
+    last_sensor_time = millis();
   }
-
+ // if obstacle is detected stop everythign
   if (cached_distance < OBSTACLE_DISTANCE)
+  {
     stop();
+    return;
+  }
   else
   {
     // read ldr
@@ -104,57 +120,67 @@ void loop()
 }
 
 // ====================== CONTROL FUNCTIONS ===============
-void PID_CTRL() {
-  int sensor_val = read_filtered_sensor();
 
-  // Time step in seconds
+void PID_CTRL() {
+  int sensor_val = read_filtered_sensor(); // smoothing out noise from the LDR
+
   unsigned long now = micros();
   float dt = (now - prev_time) / 1000000.0;
   prev_time = now;
 
-  // Prevent bad derivative spikes
   if (dt <= 0.0) dt = 0.001;
   if (dt > 0.05) dt = 0.05;
 
-  // Detect probable line loss
-  if (sensor_val >= LINE_LOST_W || sensor_val <= LINE_LOST_B) {
-    recover_line();
+  if (sensor_val >= LINE_LOST_W || sensor_val <= LINE_LOST_B) 
+  {
+    if(!recovering)
+    {
+      recovering = true;
+      recover_start_time = millis();
+    }
+  if (millis() - recover_start_time > RECOVER_TIMEOUT_MS)
+  {
+    // spin in place more aggressively
+    drive(last_turn * -140, last_turn * 140);
+  }
+  else
+      search_line();
+
+    // reset PID state so stale values don't spike on re-acquisition
+    integral   = 0.0f;
+    prev_error = 0.0f;
     return;
   }
 
-  // Error = target edge - actual reading
+  recovering = false;
+  
+  // classic PID iplementation
   error = (float)(THRESHOLD - sensor_val);
 
-  // Deadband to reduce zigzag
-  if (abs((int)error) <= DEADBAND) {
+  if (abs((int)error) <= DEADBAND)
     error = 0.0;
-  }
 
-  // Integral with anti-windup
   integral += error * dt;
-  if (integral > 40.0) integral = 40.0;
-  if (integral < -40.0) integral = -40.0;
+  if (integral > anti_windup) integral = anti_windup;
+  if (integral < -anti_windup) integral = -anti_windup;
 
-  // Derivative
   derivative = (error - prev_error) / dt;
 
-  // PID output
   float correction = k_p * error + k_i * integral + k_d * derivative;
 
-  // Remember last useful direction
+  // change turn directions so that the car doesnt spin in one single dir
   if (error > 0) last_turn = 1;
   if (error < 0) last_turn = -1;
 
-  // Slow down on sharper turns
+  // updating drive speed according to corrections
   int current_base = DRIVE_SPEED;
-
 
   if (abs((int)error) > 35) {
     current_base = SEARCH_SPEED;
   }
 
-  int right_speed = current_base - correction;
-  int left_speed  = current_base + correction;
+  int right_speed = current_base - (int)correction;
+  int left_speed  = current_base + (int)correction;
 
   drive(right_speed, left_speed);
 
@@ -164,7 +190,7 @@ void PID_CTRL() {
 // ====================== LINE HELPERS ====================
 
 
-void recover_line()
+void search_line()
 {
   if (last_turn == 1)
     drive(-RECOVER_SPEED, RECOVER_SPEED);
@@ -173,12 +199,16 @@ void recover_line()
 }
 
 bool is_on_line()  { return analogRead(PIN_LDR) < THRESHOLD; }
+
 // ====================== MOTOR HELPERS ===================
 
 void set_right_motor(int speed)
 {
+  // clamp speeds
   if (speed < -255) speed = -255;
   if (speed > 255) speed = 255;
+
+  // posivite - forward, negative backward
   if (speed > 0)
   {
     R_PORT1->PODR |=  (1 << BIT_IN1);
@@ -213,36 +243,40 @@ void set_left_motor(int speed)
   else { analogWrite(PIN_ENB, 0); }
 }
 
-void drive(int right_speed, int left_speed)
+void drive(int r, int l)
 {
-  set_right_motor(right_speed);
-  set_left_motor(left_speed);
+  set_right_motor(r);
+  set_left_motor(l);
 }
 
 void stop()
 {
   analogWrite(PIN_ENA, 0);
   analogWrite(PIN_ENB, 0);
-  R_PORT1->PODR &= ~(1 << BIT_IN1);
-  R_PORT1->PODR &= ~(1 << BIT_IN2);
-  R_PORT1->PODR &= ~(1 << BIT_IN3);
-  R_PORT1->PODR &= ~(1 << BIT_IN4);
+  R_PORT1->PODR &= ~((1 << BIT_IN1) | (1 << BIT_IN2) |
+                    (1 << BIT_IN3) | (1 << BIT_IN4));
 }
 
 // ====================== SENSOR HELPERS ==================
 
 int get_distance_cm()
 {
+  // pull trig down high down
   R_PORT4->PODR &= ~(1 << BIT_TRIG);
   delayMicroseconds(2);
   R_PORT4->PODR |=  (1 << BIT_TRIG);
   delayMicroseconds(10);
   R_PORT4->PODR &= ~(1 << BIT_TRIG);
+
+  // get echo
   unsigned long duration = pulseIn(PIN_ECHO, HIGH, 20000);
   if (duration == 0) return 999;
+  
+  // speed of sound = 343 m/s = 0.0343 cm/µs, divide by 2 for round trip
   return (duration * 0.0343) / 2;
 }
 
+// using filtered = α × raw + (1 - α) × previous_filtered
 int read_filtered_sensor()
 {
   int raw = analogRead(PIN_LDR);
