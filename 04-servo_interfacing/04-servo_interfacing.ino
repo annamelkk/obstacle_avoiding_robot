@@ -51,6 +51,8 @@ void avoidance_sequence() {
   delay(800);
   small.write(180);
   delay(1000);
+  small.write(0);
+  delay(1200);
 }
 
 int get_distance() {
