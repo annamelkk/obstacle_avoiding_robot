@@ -8,6 +8,12 @@
 #define BIG 3
 #define SMALL 5
 
+#define HORIZONTAL  180
+#define VERTICAL    100
+#define OPEN        0
+#define CLOSED      90
+#define SERVO_DELAY 10
+
 Servo big;
 Servo small;
 
@@ -17,43 +23,77 @@ int DISTANCE = 999;
 void setup() {
   Serial.begin(9600);
   big.attach(BIG, 544, 2500);
-  small.attach(SMALL, 544, 2400);
+  small.attach(SMALL);
   
   pinMode(TRIG, OUTPUT);
   pinMode(ECHO, INPUT);
+  
+ neutral_position();
+  delay(1000);
 }
 
 void loop() {
-  unsigned long now = millis();
-  
-  if (now - last_sonar > SONAR_INTERVAL) {
-    last_sonar = now;
-    DISTANCE = get_distance();
-    
-    Serial.print("Distance: ");
-    Serial.print(DISTANCE);
-    Serial.println(" cm");
-  }
-
-  if (DISTANCE < OBSTACLE_DISTANCE) {
-    Serial.println("!!! Obstacle detected !!!");
-    avoidance_sequence();
-  } else {
-    // Neutral position
-    big.write(0);
-    small.write(0);
-    Serial.println("Position neutral");
-  }
+ grab_bottle();
 }
 
-void avoidance_sequence() {
-  big.write(180);
-  delay(800);
-  small.write(180);
+void neutral_position()
+{
+  small.write(CLOSED);
+  big.write(HORIZONTAL);
+}
+
+
+void grab_bottle()
+{
+  move_arm(-1);
   delay(1000);
-  small.write(0);
-  delay(1200);
+  move_hand(-1);
+  delay(2000);
+  move_hand(1);
+  delay(1000);
+  move_arm(1);
 }
+
+void move_hand(int dir)
+{ // dir = 1 close the hand dir = -1 open the hand
+  if (dir == 1)
+  {
+    for (int i = OPEN; i <= CLOSED; i++)
+    {
+      small.write(i);
+      delay(SERVO_DELAY);
+    }
+  }
+  else if (dir == -1)
+  {
+    for (int i = CLOSED; i >= OPEN; i--)
+    {
+      small.write(i);
+      delay(SERVO_DELAY);
+    }
+  }
+}
+
+void move_arm(int dir)
+{
+  if (dir == 1)
+  {
+    for (int i = HORIZONTAL; i >= VERTICAL; i--)
+    {
+      big.write(i);
+      delay(SERVO_DELAY);
+    }
+  } 
+  else if (dir == -1)
+  {
+    for (int i = VERTICAL; i <= HORIZONTAL; i++)
+    {
+      big.write(i);
+      delay(SERVO_DELAY);
+    }
+  }
+}
+
 
 int get_distance() {
   digitalWrite(TRIG, LOW);
