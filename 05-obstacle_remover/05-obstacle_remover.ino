@@ -15,19 +15,20 @@
 #define IN4   7
 
 // ultrasonic
-#define ECHO              8
-#define TRIG              9
-#define OBSTACLE_DISTANCE 35
-#define SONAR_INTERVAL 50
+#define ECHO              A4
+#define TRIG              A3
+#define OBSTACLE_DISTANCE 15
+#define SONAR_INTERVAL    50
 
 // line sensor
 #define LDR       A0
-#define BLACK     680
+#define BLACK     650
 #define WHITE     1023
 #define GRAY      900
 #define THRESHOLD 900
 
-#define DRIVE_SPEED   45
+#define DRIVE_SPEED     50          // used for line following (PID)
+#define REMOVAL_SPEED   130
 
 // ON OFF
 #define ON_CORRECT 30
@@ -41,53 +42,48 @@
 #define K_D 0.05
 #define K_I 0.0
 
-// Servos
 
-#define BIG   10
-#define SMALL 11
-
-// ====================== CONTROLLER SELECT ==========================
-
+// ===== CONTROLLER SELECT =====
 #define CTRL_ON_OFF 0
 #define CTRL_P      1
 #define CTRL_PID    2
 
 #define CONTROL_MODE CTRL_PID
 
+// ======= SERVOS =============
+#define BIG   10
+#define SMALL 11
 
+#define HORIZONTAL  180
+#define VERTICAL    100
+#define OPEN        0
+#define CLOSED      90
+#define SERVO_DELAY 10
+
+#define REMOVAL_DELAY 600
+
+#define BUZZER 8
 
 // ====================== GLOBALS ==========================
 
-float error = 0;
-float prev_error = 0;
-float integral = 0;
-float derivative = 0;
+float error       = 0;
+float prev_error  = 0;
+float integral    = 0;
+float derivative  = 0;
 
 unsigned long last_pid_time = 0;
-unsigned long last_sonar = 0;
-
-ArduinoLEDMatrix matrix;
-
-uint8_t heart[8][12] = {
-  {0,0,0,0,0,0,0,0,0,0,0,0},
-  {0,0,1,1,0,0,0,0,1,1,0,0},
-  {0,1,1,1,1,0,0,1,1,1,1,0},
-  {0,1,1,1,1,1,1,1,1,1,1,0},
-  {0,0,1,1,1,1,1,1,1,1,0,0},
-  {0,0,0,1,1,1,1,1,1,0,0,0},
-  {0,0,0,0,1,1,1,1,0,0,0,0},
-  {0,0,0,0,0,1,1,0,0,0,0,0}
-};
+unsigned long last_sonar    = 0;
+int DISTANCE                = 999;
 
 Servo big;
 Servo small;
+
 
 // ====================== SETUP ============================
 
 void setup() 
 {
   Serial.begin(9600);
-  matrix.begin();
 
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
@@ -101,9 +97,16 @@ void setup()
   pinMode(ECHO, INPUT);
   pinMode(LDR, INPUT);
 
-  matrix.play(true);
+  big.attach(BIG, 544, 2500);
+  small.attach(SMALL);
+
+  pinMode(BUZZER, OUTPUT);
 
   stop();
+  neutral_position();
+  delay(1000);
+
+  last_pid_time = millis();
 }
 
 
@@ -111,35 +114,34 @@ void setup()
 
 void loop() 
 {
-  handle_matrix();
-  Serial.println(analogRead(LDR));
   unsigned long now = millis();
-  // update distance for dashboard
+
   if (now - last_sonar > SONAR_INTERVAL)
   {
     last_sonar = now;
-    DISTANCE = get_distance_cm();
+    DISTANCE = get_distance();
   }
 
   if (DISTANCE < OBSTACLE_DISTANCE)
   {
-    Serial.println("!!! Obstacle detected !!!");
     stop();
-    delay(500);
-    avoidance_sequence();
+
+    tone(BUZZER, 1000);
+    delay(300);
+    noTone(BUZZER);
+
+    grab_bottle();
+    remove_bottle();
+    delay(100);
+
+    last_pid_time = millis();
+    integral = 0;
     return;
-  }
-  else
-  {
-    // Neutral position
-    big.write(0);
-    small.write(0);
-    Serial.println("Position neutral");
   }
 
   int ldr = analogRead(LDR);
-  Serial.println(ldr);
-
+  Serial.print("LDR: "); Serial.println(ldr);
+  Serial.print("Distance: "); Serial.println(DISTANCE);
 
 #if CONTROL_MODE == CTRL_ON_OFF
     ON_OFF_CTRL(ldr);
@@ -148,9 +150,7 @@ void loop()
 #elif CONTROL_MODE == CTRL_PID
     PID_CTRL(ldr);
 #endif
-
 }
-
 
 
 // ====================== ON OFF CTRL =====================
@@ -192,29 +192,29 @@ void P_CTRL(int ldr)
 
 void PID_CTRL(int ldr) 
 {
-   unsigned long now = millis();
-   float dt = (now - last_pid_time) / 1000.0;
+  unsigned long now = millis();
+  float dt = (now - last_pid_time) / 1000.0;
 
-   if (dt <= 0) return;
+  if (dt <= 0) return;
 
-   last_pid_time = now;
+  last_pid_time = now;
 
   error = (ldr - GRAY);
-  Serial.println(error);
   integral += error * dt;
   integral = constrain(integral, -20, 20);
 
-   derivative = (error - prev_error) / dt;
+  derivative = (error - prev_error) / dt;
 
-   float adjust =
-        (K_P * error) +
-        (K_I * integral) +
-        (K_D * derivative);
+  float adjust =
+       (K_P * error) +
+       (K_I * integral) +
+       (K_D * derivative);
 
-   prev_error = error;
+  prev_error = error;
   adjust = constrain(adjust, -50, 50);
-   drive(DRIVE_SPEED + adjust,
-         DRIVE_SPEED - adjust);
+
+  drive(DRIVE_SPEED + adjust,
+        DRIVE_SPEED - adjust);
 }
 
 
@@ -233,7 +233,7 @@ void set_right_motor(int speed)
   else if (speed < 0) 
   {
     digitalWrite(IN1, LOW);
-digitalWrite(IN2, HIGH);
+    digitalWrite(IN2, HIGH);
     analogWrite(ENA, map(-speed, 0, 255, DZ, 255));
   } 
   else 
@@ -284,7 +284,7 @@ void stop()
 
 // ====================== SONAR ===========================
 
-int get_distance_cm() 
+int get_distance() 
 {
   digitalWrite(TRIG, LOW);
   delayMicroseconds(2);
@@ -301,22 +301,93 @@ int get_distance_cm()
 }
 
 
-// ================= HEART ANIMATION ======================
+// =================== OBSTACLE REMOVING ===================
 
-void handle_matrix()
+void neutral_position()
 {
-      matrix.renderBitmap(heart, 12, 8);
-      matrix.play(true);
+  small.write(CLOSED);
+  big.write(VERTICAL);
 }
 
 
-// ================= HEART ANIMATION ======================
-void avoidance_sequence() {
-  big.write(180);
-  delay(800);
-  small.write(180);
+void move_hand(int dir)
+{ // dir = 1 close the hand, dir = -1 open the hand
+  if (dir == 1)
+  {
+    for (int i = OPEN; i <= CLOSED; i++)
+    {
+      small.write(i);
+      delay(SERVO_DELAY);
+    }
+  }
+  else if (dir == -1)
+  {
+    for (int i = CLOSED; i >= OPEN; i--)
+    {
+      small.write(i);
+      delay(SERVO_DELAY);
+    }
+  }
+}
+
+void move_arm(int dir)
+{
+  // 1 == vertical, -1 == horizontal
+  if (dir == 1)
+  {
+    for (int i = HORIZONTAL; i >= VERTICAL; i--)
+    {
+      big.write(i);
+      delay(SERVO_DELAY);
+    }
+  } 
+  else if (dir == -1)
+  {
+    for (int i = VERTICAL; i <= HORIZONTAL; i++)
+    {
+      big.write(i);
+      delay(SERVO_DELAY);
+    }
+  }
+}
+
+
+void grab_bottle()
+{
+  drive(DRIVE_SPEED, DRIVE_SPEED);
+  delay(500);
+  stop();
+  move_hand(-1);
   delay(1000);
-  small.write(0);
-  delay(1200);
+  move_arm(-1);
+  delay(1000);
+  move_hand(1);
+  delay(2000);
+  move_arm(1);
 }
 
+void remove_bottle()
+{ 
+  stop();
+  delay(1000);
+
+  // so motors don't stall under load during the turn
+  drive(REMOVAL_SPEED - 50, REMOVAL_SPEED + 50);
+  delay(REMOVAL_DELAY);
+  stop();
+
+  delay(500);
+  move_arm(-1);
+  delay(1000);
+  move_hand(-1);
+  delay(1000);
+  move_arm(1);
+  delay(1000);
+  move_hand(1);
+  delay(1000);
+
+  drive(-(REMOVAL_SPEED - 50), -(REMOVAL_SPEED + 50));
+  delay(REMOVAL_DELAY);
+  stop();
+  delay(200);
+}

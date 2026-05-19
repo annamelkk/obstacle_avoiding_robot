@@ -34,6 +34,8 @@ int DISTANCE = 999;
 #define CLOSED      90
 #define SERVO_DELAY 10
 
+#define REMOVAL_DELAY 600
+
 // buzzer
 #define BUZZER 8
 
@@ -99,7 +101,7 @@ void loop()
 void neutral_position()
 {
   small.write(CLOSED);
-  big.write(HORIZONTAL);
+  big.write(VERTICAL);
 }
 
 
@@ -125,6 +127,7 @@ void move_hand(int dir)
 
 void move_arm(int dir)
 {
+  // 1 == vertical -1 == horizontal
   if (dir == 1)
   {
     for (int i = HORIZONTAL; i >= VERTICAL; i--)
@@ -146,36 +149,37 @@ void move_arm(int dir)
 
 void grab_bottle()
 {
+  move_hand(-1);
+  delay(1000);
   move_arm(-1);
   delay(1000);
-  move_hand(-1);
-  delay(2000);
   move_hand(1);
-  delay(1000);
+  delay(2000);
   move_arm(1);
 }
 
 void remove_bottle()
 { 
   stop();
-  delay(200);
+  delay(1000);
 
   // removal side is hardcoded as there are no sensors to detect
   drive(DRIVE_SPEED, DRIVE_SPEED+20);
-  delay(1000);
+  delay(REMOVAL_DELAY);
+  stop();
 
-
+  delay(500);
   move_arm(-1);
   delay(1000);
   move_hand(-1);
   delay(1000);
-  move_hand(1);
-  delay(1000);
   move_arm(1);
+  delay(1000);
+  move_hand(1);
   delay(1000);
 
   drive(-DRIVE_SPEED, -(DRIVE_SPEED+20));
-  delay(1000);
+  delay(REMOVAL_DELAY);
 }
 
 // =================== SONAR ================================
